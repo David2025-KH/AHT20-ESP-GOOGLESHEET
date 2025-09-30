@@ -1,0 +1,114 @@
+function doGet(e) {
+  Logger.log(JSON.stringify(e));
+  
+  var result = 'Ok';
+  
+  // Check if parameters are provided to log data
+  if (e.parameter && e.parameter.sts !== undefined) {
+    var sheet_id = '12gX6PeS_jOvf88MeKnKze5WN_Tkb5JE3BzR2Ce0BdN0';  // Spreadsheet ID.
+    var sheet_name = "Data";  // Sheet Name in Google Sheets.
+    
+    var sheet_open = SpreadsheetApp.openById(sheet_id);
+    var sheet_target = sheet_open.getSheetByName(sheet_name);
+    
+    var newRow = sheet_target.getLastRow() + 1;
+    var rowDataLog = [];
+    
+    var Curr_Date = Utilities.formatDate(new Date(), "Asia/Jakarta", 'dd/MM/yyyy');
+    rowDataLog[0] = Curr_Date;  // Date in column A
+    var Curr_Time = Utilities.formatDate(new Date(), "Asia/Jakarta", 'HH:mm:ss');
+    rowDataLog[1] = Curr_Time;  // Time in column B
+    
+    var sts_val = '';
+    
+    // Process incoming parameters and map them to the rowDataLog
+    for (var param in e.parameter) {
+      var value = stripQuotes(e.parameter[param]);
+      switch (param) {
+        case 'sts':
+          sts_val = value;
+          break;
+        case 'data.pm10_env':
+          rowDataLog[2] = value;
+          break;
+        case 'data.pm25_env':
+          rowDataLog[3] = value;
+          break;
+        case 'data.pm100_env':
+          rowDataLog[4] = value;
+          break;
+        case 'oxygenData': 
+          rowDataLog[5] = value;
+          break;
+        case 'co2Concentration': 
+          rowDataLog[6] = value;
+          break;
+        case 'aht20_temp.temperature':
+          rowDataLog[7] = value;
+          break;
+        case 'aht20_humidity.relative_humidity':
+          rowDataLog[8] = value;
+          break;
+        case 'dpsPressure':
+          rowDataLog[9] = value;
+          break;
+        case 'VOCindex': 
+          rowDataLog[10] = value;
+          break;
+        case 'aqiPM25': 
+          rowDataLog[11] = value;
+          break;
+        case 'data.aqi_pm100_us': 
+          rowDataLog[12] = value;
+          break;
+
+        default:
+          result += ", unsupported parameter";
+      }
+    }
+    
+    // Write to the sheet if the status is 'write'
+    if (sts_val == 'write') {
+      Logger.log(JSON.stringify(rowDataLog));
+      var newRangeDataLog = sheet_target.getRange(newRow, 1, 1, rowDataLog.length);
+      newRangeDataLog.setValues([rowDataLog]);
+
+      // Write the latest data to a specific range
+      var RangeDataLatest = sheet_target.getRange('A2:M2');
+      RangeDataLatest.setValues([[
+        rowDataLog[0], rowDataLog[1], rowDataLog[2], rowDataLog[3], rowDataLog[4], 
+        rowDataLog[5], rowDataLog[6], rowDataLog[7], rowDataLog[8], rowDataLog[9], 
+        rowDataLog[10], rowDataLog[11], rowDataLog[12],
+      ]]);
+
+      return ContentService.createTextOutput(result);
+    }
+    // Send all data to UI
+  } else {
+    // If no parameters to write, return the sheet data as JSON
+    var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Data");
+    var data = sheet.getDataRange().getValues();
+    var jsonData = {};
+
+    // Assume first row is headers
+    var headers = data[0];
+    jsonData['data'] = [];
+
+    // Start from row 1 to skip headers
+    for (var i = 1; i < data.length; i++) {
+      var row = {};
+      for (var j = 0; j < headers.length; j++) {
+        row[headers[j]] = data[i][j];
+      }
+      jsonData['data'].push(row);
+    }
+
+    return ContentService.createTextOutput(JSON.stringify(jsonData))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+}
+
+// Helper function to strip quotes from a string
+function stripQuotes(value) {
+  return value.replace(/^["']|['"]$/g, "");
+}
