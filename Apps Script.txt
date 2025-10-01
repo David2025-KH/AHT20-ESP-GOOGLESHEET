@@ -1,114 +1,92 @@
+// ===== Main Web App Function =====
 function doGet(e) {
-  Logger.log(JSON.stringify(e));
+  Logger.log(JSON.stringify(e));  // Debug: log all incoming parameters
   
-  var result = 'Ok';
+  var result = 'Ok';  // Default response message
   
-  // Check if parameters are provided to log data
+  // ===== Case 1: ESP32 sends parameters (write to Google Sheet) =====
   if (e.parameter && e.parameter.sts !== undefined) {
-    var sheet_id = '12gX6PeS_jOvf88MeKnKze5WN_Tkb5JE3BzR2Ce0BdN0';  // Spreadsheet ID.
-    var sheet_name = "Data";  // Sheet Name in Google Sheets.
     
+    // --- Spreadsheet Setup ---
+    var sheet_id = '1Dgf9J-cBjC2BWpp18VJfcl0EdEF6dor8cMjQ9rYmYZA';  // Replace with your own Google Sheet ID
+    var sheet_name = "Page1";  // Target sheet name
     var sheet_open = SpreadsheetApp.openById(sheet_id);
     var sheet_target = sheet_open.getSheetByName(sheet_name);
     
-    var newRow = sheet_target.getLastRow() + 1;
-    var rowDataLog = [];
+    // --- Row Preparation ---
+    var newRow = sheet_target.getLastRow() + 1;  // Next empty row
+    var rowDataLog = [];  // Store one row of data
     
+    // --- Date & Time (Asia/Jakarta timezone) ---
     var Curr_Date = Utilities.formatDate(new Date(), "Asia/Jakarta", 'dd/MM/yyyy');
-    rowDataLog[0] = Curr_Date;  // Date in column A
+    rowDataLog[0] = Curr_Date;  // Column A → Date
     var Curr_Time = Utilities.formatDate(new Date(), "Asia/Jakarta", 'HH:mm:ss');
-    rowDataLog[1] = Curr_Time;  // Time in column B
+    rowDataLog[1] = Curr_Time;  // Column B → Time
     
+    // --- Parameter Handling ---
     var sts_val = '';
-    
-    // Process incoming parameters and map them to the rowDataLog
     for (var param in e.parameter) {
-      var value = stripQuotes(e.parameter[param]);
+      var value = stripQuotes(e.parameter[param]);  // Clean incoming values
+      
       switch (param) {
-        case 'sts':
+        case 'sts':  // Status flag
           sts_val = value;
           break;
-        case 'data.pm10_env':
-          rowDataLog[2] = value;
+        case 'aht20_temp.temperature':  // Temperature
+          rowDataLog[2] = value;  // Column C → Temperature
           break;
-        case 'data.pm25_env':
-          rowDataLog[3] = value;
+        case 'aht20_humidity.relative_humidity':  // Humidity
+          rowDataLog[3] = value;  // Column D → Humidity
           break;
-        case 'data.pm100_env':
-          rowDataLog[4] = value;
-          break;
-        case 'oxygenData': 
-          rowDataLog[5] = value;
-          break;
-        case 'co2Concentration': 
-          rowDataLog[6] = value;
-          break;
-        case 'aht20_temp.temperature':
-          rowDataLog[7] = value;
-          break;
-        case 'aht20_humidity.relative_humidity':
-          rowDataLog[8] = value;
-          break;
-        case 'dpsPressure':
-          rowDataLog[9] = value;
-          break;
-        case 'VOCindex': 
-          rowDataLog[10] = value;
-          break;
-        case 'aqiPM25': 
-          rowDataLog[11] = value;
-          break;
-        case 'data.aqi_pm100_us': 
-          rowDataLog[12] = value;
-          break;
-
         default:
-          result += ", unsupported parameter";
+          result += ", unsupported parameter";  // Ignore unknown params
       }
     }
     
-    // Write to the sheet if the status is 'write'
+    // --- Write Data if sts == "write" ---
     if (sts_val == 'write') {
-      Logger.log(JSON.stringify(rowDataLog));
+      Logger.log(JSON.stringify(rowDataLog));  // Debug
+      
+      // Append new row (Date, Time, Temp, Humidity)
       var newRangeDataLog = sheet_target.getRange(newRow, 1, 1, rowDataLog.length);
       newRangeDataLog.setValues([rowDataLog]);
-
-      // Write the latest data to a specific range
-      var RangeDataLatest = sheet_target.getRange('A2:M2');
-      RangeDataLatest.setValues([[
-        rowDataLog[0], rowDataLog[1], rowDataLog[2], rowDataLog[3], rowDataLog[4], 
-        rowDataLog[5], rowDataLog[6], rowDataLog[7], rowDataLog[8], rowDataLog[9], 
-        rowDataLog[10], rowDataLog[11], rowDataLog[12],
-      ]]);
-
-      return ContentService.createTextOutput(result);
+      
+      // Update "Latest Data" section (Row 2, Columns A–D)
+      var RangeDataLatest = sheet_target.getRange('A2:D2');
+      RangeDataLatest.setValues([[ rowDataLog[0], rowDataLog[1], rowDataLog[2], rowDataLog[3] ]]);
+      
+      return ContentService.createTextOutput(result);  // Return success message
     }
-    // Send all data to UI
-  } else {
-    // If no parameters to write, return the sheet data as JSON
-    var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Data");
+    
+  } 
+  
+  // ===== Case 2: No parameters → Return all data as JSON (for UI/dashboard) =====
+  else {
+    var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Data");  // "Data" sheet for JSON export
     var data = sheet.getDataRange().getValues();
     var jsonData = {};
-
-    // Assume first row is headers
+    
+    // --- Assume first row is headers ---
     var headers = data[0];
     jsonData['data'] = [];
-
-    // Start from row 1 to skip headers
+    
+    // --- Loop through rows (skip header row) ---
     for (var i = 1; i < data.length; i++) {
       var row = {};
       for (var j = 0; j < headers.length; j++) {
-        row[headers[j]] = data[i][j];
+        row[headers[j]] = data[i][j];  // Map header → value
       }
       jsonData['data'].push(row);
     }
-
+    
+    // --- Return JSON response ---
     return ContentService.createTextOutput(JSON.stringify(jsonData))
       .setMimeType(ContentService.MimeType.JSON);
   }
 }
 
-// Helper function to strip quotes from a string
+// ===== Helper Function =====
+// Remove surrounding quotes from string values
 function stripQuotes(value) {
   return value.replace(/^["']|['"]$/g, "");
 }
